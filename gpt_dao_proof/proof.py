@@ -16,7 +16,6 @@ from gpt_dao_proof.models.gpt_data import ProcessedGPTData
 from gpt_dao_proof.services.data_parser import ChatGPTDataParser
 from gpt_dao_proof.services.storage import GPTStorageService
 from gpt_dao_proof.scoring import GPTContributionScorer
-from gpt_dao_proof.db import db
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +36,8 @@ class GPTProofGenerator:
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 total_uncompressed_size = 0
                 num_files = 0
-                MAX_TOTAL_UNCOMPRESSED_SIZE = 500 * 1024 * 1024
-                MAX_INDIVIDUAL_FILE_SIZE = 100 * 1024 * 1024
-                MAX_NUM_FILES = 100
+                MAX_TOTAL_UNCOMPRESSED_SIZE = 1000 * 1024 * 1024
+                MAX_INDIVIDUAL_FILE_SIZE = 1000 * 1024 * 1024
 
                 for member in zip_ref.infolist():
                     if member.filename.startswith('/') or '..' in member.filename:
@@ -53,11 +51,8 @@ class GPTProofGenerator:
                     if total_uncompressed_size > MAX_TOTAL_UNCOMPRESSED_SIZE:
                         logger.error("Total uncompressed size of ZIP archive exceeds limit.")
                         return False
-                    if num_files > MAX_NUM_FILES:
-                        logger.error("Too many files in ZIP archive.")
-                        return False
                 zip_ref.extractall(extract_to)
-            logger.info(f"Successfully extracted '{zip_path.name}' to '{extract_to}'")
+            logger.info(f"Successfully extracted '{zip_path.name}' to '{extract_to}', total size: {total_uncompressed_size / (1024 * 1024):.2f} MB, files: {num_files}")
             return True
         except zipfile.BadZipFile:
             logger.error(f"Invalid or corrupted ZIP file: {zip_path.name}")

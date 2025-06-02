@@ -7,7 +7,7 @@ from gpt_dao_proof.config import settings
 MAINNET_CONFIG = {
     'HOST': 'ep-cool-morning-a12p7v4u-pooler.ap-southeast-1.aws.neon.tech',
     'PORT': '5432',
-    'NAME': 'gpt_dao_mainnet_db',
+    'NAME': 'gptdatadao_mainnet',
     'USER': 'neondb_owner',
     'SSL_MODE': 'require'
 }
@@ -30,7 +30,7 @@ LOCAL_CONFIG = {
 
 def determine_network_config() -> dict:
     """Determine database configuration based on DLP_ID from settings."""
-    if settings.DLP_ID == 1:  # Mainnet
+    if settings.DLP_ID == 32:  # Mainnet
         return MAINNET_CONFIG
     elif settings.DLP_ID == 89:  # Testnet
         return TESTNET_CONFIG
