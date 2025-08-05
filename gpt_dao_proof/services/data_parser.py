@@ -126,6 +126,80 @@ class ChatGPTDataParser:
             logger.error(f"Generic error parsing chat.html: {str(e)}")
             return []
 
+    def _validate_conversations_structure(self, conversations_json: List[Dict]) -> None:
+        """Validate the structure of conversations data and raise ValueError if invalid."""
+        for i, conversation in enumerate(conversations_json):
+            try:
+                # Check basic conversation structure
+                if not isinstance(conversation, dict):
+                    raise ValueError(f"Conversation {i} is not a dictionary")
+                
+                # Check for mapping field
+                messages_dict = conversation.get("mapping")
+                if not isinstance(messages_dict, dict):
+                    raise ValueError(f"Conversation {i} has invalid or missing 'mapping' field")
+                
+                """
+                This check checks for a few of the fields included by chatgpt (but is a non-exhaustive list).
+                This acts as a big filter, and detects a lot of the spam data (when I run it on a small subsample 5859/7802 fail this check)
+                """
+                for c in ['memory_scope', 'disabled_tool_ids', 'moderation_results', 'blocked_urls']:
+                    if c not in conversation.keys():
+                        raise KeyError(f"Conversation missing '{c}' fields")
+                
+                if not messages_dict:
+                    continue  # Empty mapping is allowed
+                
+                # Check for root node (parent is None)
+                root_candidates = [
+                    v["id"]
+                    for v in messages_dict.values()
+                    if isinstance(v, dict) and "parent" in v and v["parent"] is None
+                ]
+                
+                if not root_candidates:
+                    raise ValueError(f"Conversation {i} has no root node (no node with parent=None)")
+                
+                root = root_candidates[0]
+                
+                # Verify root node has required structure
+                if root not in messages_dict:
+                    raise ValueError(f"Conversation {i} root node {root} not found in mapping")
+                
+                root_node = messages_dict[root]
+                if not isinstance(root_node, dict) or "children" not in root_node:
+                    raise ValueError(f"Conversation {i} root node missing 'children' field")
+                
+                # Validate message nodes have required fields
+                for node_id, node_data in messages_dict.items():
+                    if not isinstance(node_data, dict):
+                        continue
+                    
+                    # Check for required node structure
+                    if "id" not in node_data:
+                        raise ValueError(f"Conversation {i} node {node_id} missing 'id' field")
+                    
+                    # If node has a message, validate message structure
+                    message = node_data.get("message")
+                    if message is not None:
+                        if not isinstance(message, dict):
+                            raise ValueError(f"Conversation {i} node {node_id} has invalid message field")
+                        
+                        # Check for author role
+                        author = message.get("author", {})
+                        if not isinstance(author, dict) or "role" not in author:
+                            raise ValueError(f"Conversation {i} node {node_id} message missing author.role")
+                        
+                        # Check for content structure
+                        content = message.get("content")
+                        if content is not None and not isinstance(content, dict):
+                            raise ValueError(f"Conversation {i} node {node_id} message has invalid content field")
+                
+            except (KeyError, TypeError, AttributeError, IndexError) as e:
+                raise ValueError(f"Conversation {i} structure validation failed: {str(e)}")
+        
+        logger.info(f"Conversation structure validation passed for {len(conversations_json)} conversations")
+
     def _get_message_text_from_node(self, node_data: Optional[Dict]) -> str:
         if not node_data: return ""
         message_content = node_data.get("message", {}).get("content", {})
@@ -156,6 +230,9 @@ class ChatGPTDataParser:
         if not conversations_json:
             logger.warning("No conversation data found. Subsequent metrics will be zero.")
             return
+
+        # Validate conversation structure before processing
+        self._validate_conversations_structure(conversations_json)
 
         daily_counts = defaultdict(int)
         hourly_counts = defaultdict(int) # For 24-hour cycle
